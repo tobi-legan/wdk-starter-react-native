@@ -36,7 +36,7 @@ export const baseConfig: Partial<Options.Testrunner> = {
 
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60000,
+    timeout: 120000, // 2 minutes - wallet creation can take 30-60 seconds, plus other test steps
   },
 
   /**
