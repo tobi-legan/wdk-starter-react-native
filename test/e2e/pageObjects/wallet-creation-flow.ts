@@ -28,7 +28,7 @@ export class WalletCreationFlow {
       // This matches what Appium Inspector showed
       return $('-ios predicate string:name == "₿" AND label == "₿" AND type == "XCUIElementTypeOther"');
     }
-    return $('~B'); // Using accessibility ID/content-desc for Android
+    return $('~₿'); // Using accessibility ID/content-desc for Android
   }
 
   /**
@@ -63,6 +63,83 @@ export class WalletCreationFlow {
   }
 
   /**
+   * Waits for 12 mnemonic word elements to be visible on the screen
+   * This ensures all words are fully rendered before extraction
+   */
+  async waitForMnemonicWordsToLoad(timeout: number = 30000): Promise<void> {
+    const isIOS = (driver as any).capabilities.platformName === 'iOS';
+    const startTime = Date.now();
+    const seenWords = new Set<string>();
+    
+    while (Date.now() - startTime < timeout) {
+      try {
+        let wordCount = 0;
+        seenWords.clear();
+        
+        if (isIOS) {
+          // For iOS, count all StaticText elements that look like mnemonic words
+          const allTextElements = await driver.$$('-ios class chain:**/XCUIElementTypeStaticText');
+          const elements = await allTextElements;
+          
+          for (const element of elements) {
+            try {
+              const text = await element.getText();
+              if (text && text.length >= 3 && text.length <= 8 && /^[a-z]+$/.test(text.trim())) {
+                const excludedWords = ['back', 'next', 'copy', 'phrase', 'hide', 'show', 'secure', 'wallet', 'your', 'this', 'secret', 'only', 'way', 'recover', 'store', 'safely', 'never', 'share', 'anyone', 'with', 'can', 'access'];
+                const word = text.trim().toLowerCase();
+                if (!excludedWords.includes(word) && !seenWords.has(word)) {
+                  seenWords.add(word);
+                  wordCount++;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        } else {
+          // For Android, count all TextView elements that look like mnemonic words
+          const allTextElements = await driver.$$('android=new UiSelector().className("android.widget.TextView")');
+          const elements = await allTextElements;
+          
+          for (const element of elements) {
+            try {
+              const text = await element.getText();
+              if (text && text.length >= 3 && text.length <= 8 && /^[a-z]+$/.test(text.trim())) {
+                const excludedWords = ['back', 'next', 'copy', 'phrase', 'hide', 'show', 'secure', 'wallet', 'your', 'this', 'secret', 'only', 'way', 'recover', 'store', 'safely', 'never', 'share', 'anyone', 'with', 'can', 'access'];
+                const word = text.trim().toLowerCase();
+                if (!excludedWords.includes(word) && !seenWords.has(word)) {
+                  seenWords.add(word);
+                  wordCount++;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+        
+        if (wordCount >= 12) {
+          console.log(`[Wallet Creation] Found ${wordCount} mnemonic words, proceeding...`);
+          return; // Found 12 words, we're done
+        }
+        
+        // Log progress every 5 seconds
+        const elapsed = Date.now() - startTime;
+        if (elapsed % 5000 < 500) {
+          console.log(`[Wallet Creation] Waiting for mnemonic words... Found ${wordCount}/12 so far`);
+        }
+      } catch (e) {
+        // Continue waiting
+      }
+      
+      // Wait a bit before checking again
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    throw new Error(`Timeout waiting for 12 mnemonic words to load (waited ${timeout}ms)`);
+  }
+
+  /**
    * Extracts all mnemonic phrase words from the Secure Your Wallet screen
    * Returns an array of 12 words in order
    */
@@ -71,24 +148,36 @@ export class WalletCreationFlow {
     const words: string[] = [];
 
     if (isIOS) {
-      // For iOS, find all static text elements that are likely mnemonic words
-      // The words are displayed as XCUIElementTypeStaticText elements
-      // We'll get all static texts and filter for valid mnemonic words
-      const allTextElements = await driver.$$('-ios class chain:**/XCUIElementTypeStaticText');
+      // For iOS, try multiple element types to find mnemonic words
+      // Words could be in StaticText, Button, or Other elements
+      const selectors = [
+        '-ios class chain:**/XCUIElementTypeStaticText',
+        '-ios class chain:**/XCUIElementTypeButton',
+        '-ios class chain:**/XCUIElementTypeOther',
+      ];
       
-      for (const element of allTextElements) {
+      for (const selector of selectors) {
         try {
-          const text = await element.getText();
-          // Mnemonic words are typically lowercase, 3-8 characters, and not numbers or special text
-          if (text && text.length >= 3 && text.length <= 8 && /^[a-z]+$/.test(text.trim())) {
-            // Exclude common UI text that might match
-            const excludedWords = ['back', 'next', 'copy', 'phrase', 'hide', 'show', 'secure', 'wallet', 'your', 'this', 'secret', 'only', 'way', 'recover', 'store', 'safely', 'never', 'share', 'anyone', 'with', 'can', 'access'];
-            if (!excludedWords.includes(text.trim().toLowerCase())) {
-              words.push(text.trim());
+          const allTextElements = await driver.$$(selector);
+          
+          for (const element of allTextElements) {
+            try {
+              const text = await element.getText();
+              // Mnemonic words are typically lowercase, 3-8 characters, and not numbers or special text
+              if (text && text.length >= 3 && text.length <= 8 && /^[a-z]+$/.test(text.trim())) {
+                // Exclude common UI text that might match
+                const excludedWords = ['back', 'next', 'copy', 'phrase', 'hide', 'show', 'secure', 'wallet', 'your', 'this', 'secret', 'only', 'way', 'recover', 'store', 'safely', 'never', 'share', 'anyone', 'with', 'can', 'access'];
+                if (!excludedWords.includes(text.trim().toLowerCase()) && !words.includes(text.trim())) {
+                  words.push(text.trim());
+                }
+              }
+            } catch (e) {
+              // Skip elements that can't be read
+              continue;
             }
           }
         } catch (e) {
-          // Skip elements that can't be read
+          // Continue to next selector
           continue;
         }
       }
@@ -144,7 +233,8 @@ export class WalletCreationFlow {
     try {
       await goToWalletButton.waitForDisplayed({ timeout });
       console.log('[Wallet Creation] Wallet creation completed successfully');
-      await driver.pause(1000); // Small pause to ensure screen is fully loaded
+      // Wait for button to be clickable to ensure screen is fully loaded
+      await goToWalletButton.waitForClickable({ timeout: 5000 });
     } catch (e) {
       // If button not found, try waiting for the title as fallback
       console.log('[Wallet Creation] "Go To Wallet" button not found, trying to find "You\'re All Set!" title...');
@@ -156,7 +246,8 @@ export class WalletCreationFlow {
       try {
         await allSetTitle.waitForDisplayed({ timeout: 10000 });
         console.log('[Wallet Creation] Found "You\'re All Set!" title');
-        await driver.pause(1000);
+        // Wait for Go To Wallet button to appear after title
+        await goToWalletButton.waitForDisplayed({ timeout: 10000 });
       } catch (e2) {
         throw new Error(`Could not find "Go To Wallet" button or "You're All Set!" title after ${timeout}ms`);
       }
@@ -246,7 +337,7 @@ export class WalletCreationFlow {
             const text = await wordElement.getText();
             if (text && text.trim().toLowerCase() === expectedWord.toLowerCase()) {
               await wordElement.click();
-              await driver.pause(500);
+              // Wait for click to register - word should be selected
               return;
             }
           }
@@ -269,7 +360,7 @@ export class WalletCreationFlow {
           const wordElement = $(selector);
           await wordElement.waitForDisplayed({ timeout: 3000 });
           await wordElement.click();
-          await driver.pause(500);
+          // Wait for click to register
           return;
         } catch (e) {
           // Try next selector
@@ -282,7 +373,7 @@ export class WalletCreationFlow {
         const wordElement = $(`~${expectedWord}`);
         await wordElement.waitForDisplayed({ timeout: 3000 });
         await wordElement.click();
-        await driver.pause(500);
+        // Wait for click to register
         return;
       } catch (e) {
         // Fall through to error
@@ -295,7 +386,7 @@ export class WalletCreationFlow {
     const wordButton = this.getWordOptionButton(expectedWord);
     await wordButton.waitForDisplayed({ timeout: 5000 });
     await wordButton.click();
-    await driver.pause(500);
+    // Wait for click to register
   }
 
   /**
@@ -325,9 +416,6 @@ export class WalletCreationFlow {
    */
   async isOnWalletScreen(): Promise<boolean> {
     try {
-      // Wait a bit for screen to load
-      await driver.pause(2000);
-      
       // Check if we can find wallet-related elements
       // Adjust selectors based on actual wallet screen
       const isIOS = (driver as any).capabilities.platformName === 'iOS';
@@ -335,6 +423,7 @@ export class WalletCreationFlow {
         ? $('-ios class chain:**/XCUIElementTypeStaticText[`name CONTAINS "Wallet" OR label CONTAINS "Wallet"`]')
         : $('android=new UiSelector().textMatches(".*Wallet.*")');
       
+      // Wait for wallet screen to load by waiting for wallet indicator
       await walletIndicator.waitForDisplayed({ timeout: 10000 });
       return true;
     } catch {

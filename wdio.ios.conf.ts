@@ -24,6 +24,7 @@ export const config = {
       'appium:appWaitTimeout': 60000,
       'appium:wdaLaunchTimeout': 120000,
       'appium:wdaConnectionTimeout': 120000,
+      'appium:autoAcceptAlerts': true, // Automatically accept system alerts like "Allow Paste"
     },
   ],
 
@@ -46,7 +47,7 @@ export const config = {
 
   mochaOpts: {
     ui: 'bdd',
-    timeout: 120000, // 2 minutes - wallet creation can take 30-60 seconds, plus other test steps
+    timeout: 180000, // 3 minutes - wallet creation can take 30-60 seconds, plus other test steps
   },
 };
 

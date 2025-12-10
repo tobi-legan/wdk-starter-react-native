@@ -1,4 +1,4 @@
-import { driver, expect } from '@wdio/globals';
+import { driver, expect, $ } from '@wdio/globals';
 import { HomeOnboardingScreen } from '../pageObjects/home-onboarding-screen';
 import { WalletCreationFlow } from '../pageObjects/wallet-creation-flow';
 import { qase } from '../utils/qase-wrapper';
@@ -39,51 +39,65 @@ describe('Onboarding Screen', () => {
   }));
 
   it('TW-2: Verify Template Wallet created', qase('TW-2', async () => {
-    // Wait for app to load
-    await driver.pause(3000);
-
+    // Get platform info for this test
+    const isIOS = (driver as any).capabilities.platformName === 'iOS';
+    
     // Step 1: Click Create Wallet button
     const createWalletButton = walletCreationFlow.getCreateWalletButton();
-    await expect(createWalletButton).toBeDisplayed();
+    await createWalletButton.waitForDisplayed({ timeout: 10000 });
     await createWalletButton.click();
-    await driver.pause(2000);
-
-    // Step 2: Enter wallet name "Template Wallet"
+    // Wait for wallet name input screen to load
     const walletNameInput = walletCreationFlow.getWalletNameInput();
     await walletNameInput.waitForDisplayed({ timeout: 10000 });
+
+    // Step 2: Enter wallet name "Template Wallet"
     await walletNameInput.setValue('Template Wallet');
-    await driver.pause(1000);
+    // Wait for input to be populated
 
     // Step 3: Select the first avatar (Bitcoin logo)
     const firstAvatar = walletCreationFlow.getFirstAvatar();
     await firstAvatar.waitForDisplayed({ timeout: 10000 });
     await firstAvatar.click();
-    await driver.pause(500);
-
-    // Step 4: Click Next to go to secure wallet screen
+    // Wait for avatar selection to register - Next button should appear/enable
     const nameWalletPageNextButton = walletCreationFlow.getNextButton();
     await nameWalletPageNextButton.waitForDisplayed({ timeout: 10000 });
-    await nameWalletPageNextButton.click();
-    await driver.pause(3000); // Wait for secure wallet screen to load
 
-    // Step 5: Extract and save mnemonic phrase words
+    // Step 4: Click Next to go to secure wallet screen
+    await nameWalletPageNextButton.click();
+    // Wait for secure wallet screen to load - wait for mnemonic words to appear
+    const secureWalletPageNextButton = walletCreationFlow.getSecureWalletPageNextButton();
+    await secureWalletPageNextButton.waitForDisplayed({ timeout: 15000 });
+
+    // Step 5: Wait for 12 mnemonic words to be fully loaded before extracting
+    await walletCreationFlow.waitForMnemonicWordsToLoad(30000);
+    
+    // Extract and save mnemonic phrase words
     const mnemonicWords = await walletCreationFlow.getMnemonicWords();
     expect(mnemonicWords.length).toBeGreaterThanOrEqual(12);
     // Save the mnemonic words for later use in confirmation
     savedMnemonicWords = mnemonicWords.slice(0, 12);
     console.log('Saved mnemonic phrase:', savedMnemonicWords.join(' '));
 
-    // Step 6: Optionally click Copy Phrase button
+    // Step 6: Click Copy Phrase button
     const copyPhraseButton = walletCreationFlow.getCopyPhraseButton();
     await copyPhraseButton.waitForDisplayed({ timeout: 10000 });
     await copyPhraseButton.click();
-    await driver.pause(1000);
+    
+    // On Android, wait 20 seconds after clicking Copy Phrase to allow sharing dialog to close
+    // On iOS, shorter wait for clipboard operation
+    if (!isIOS) {
+      await new Promise(resolve => setTimeout(resolve, 20000));
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
     // Step 7: Click Next to go to confirm phrase screen
-    const secureWalletPageNextButton = walletCreationFlow.getSecureWalletPageNextButton();
-    await secureWalletPageNextButton.waitForDisplayed({ timeout: 10000 });
     await secureWalletPageNextButton.click();
-    await driver.pause(3000); // Wait for confirm phrase screen to load
+    // Wait for confirm phrase screen to load - wait for first word position label (Word #3)
+    const firstWordLabel = isIOS
+      ? $('-ios class chain:**/XCUIElementTypeStaticText[`name == "Word #3" OR label == "Word #3"`]')
+      : $('android=new UiSelector().text("Word #3")');
+    await firstWordLabel.waitForDisplayed({ timeout: 15000 });
 
     // Step 8: Confirm phrase by selecting correct words for each position
     // Word #3 corresponds to savedMnemonicWords[2] (0-indexed, so position 3 is index 2)
@@ -95,29 +109,39 @@ describe('Onboarding Screen', () => {
     
     // Select word for position 3
     await walletCreationFlow.selectWordForPosition(3, savedMnemonicWords[2]);
-    await driver.pause(500);
+    // Wait for next word position (Word #5) to appear
+    const word5Label = isIOS
+      ? $('-ios class chain:**/XCUIElementTypeStaticText[`name == "Word #5" OR label == "Word #5"`]')
+      : $('android=new UiSelector().text("Word #5")');
+    await word5Label.waitForDisplayed({ timeout: 10000 });
     
     // Select word for position 5
     await walletCreationFlow.selectWordForPosition(5, savedMnemonicWords[4]);
-    await driver.pause(500);
+    // Wait for next word position (Word #7) to appear
+    const word7Label = isIOS
+      ? $('-ios class chain:**/XCUIElementTypeStaticText[`name == "Word #7" OR label == "Word #7"`]')
+      : $('android=new UiSelector().text("Word #7")');
+    await word7Label.waitForDisplayed({ timeout: 10000 });
     
     // Select word for position 7
     await walletCreationFlow.selectWordForPosition(7, savedMnemonicWords[6]);
-    await driver.pause(500);
+    // Wait for next word position (Word #12) to appear
+    const word12Label = isIOS
+      ? $('-ios class chain:**/XCUIElementTypeStaticText[`name == "Word #12" OR label == "Word #12"`]')
+      : $('android=new UiSelector().text("Word #12")');
+    await word12Label.waitForDisplayed({ timeout: 10000 });
     
     // Select word for position 12
     await walletCreationFlow.selectWordForPosition(12, savedMnemonicWords[11]);
-    await driver.pause(1000);
-
-    // Step 9: Click Next to proceed after confirming all words
+    // Wait for all words to be selected - next button should be enabled
     const confirmPhrasePageNextButton = walletCreationFlow.getConfirmPhrasePageNextButton();
     await confirmPhrasePageNextButton.waitForDisplayed({ timeout: 10000 });
+
+    // Step 9: Click Next to proceed after confirming all words
     await confirmPhrasePageNextButton.click();
     
     // Step 10: Wait for wallet creation loading to complete
     // The app will show "Creating Your Wallet..." screen, then transition to "You're All Set!"
-    // Add a pause to allow the loading state to start
-    await driver.pause(2000);
     // Wait up to 90 seconds for wallet creation to complete (it's not instant)
     await walletCreationFlow.waitForWalletCreationToComplete(90000);
     
@@ -125,13 +149,13 @@ describe('Onboarding Screen', () => {
     const goToWalletButton = walletCreationFlow.getGoToWalletButton();
     await goToWalletButton.waitForDisplayed({ timeout: 30000 });
     await goToWalletButton.click();
-    await driver.pause(3000); // Wait for wallet screen to load
-
-    // Step 12: Verify wallet was created by checking if we're on wallet screen
+    
+    // Step 12: Wait for wallet screen to load - verify we're on wallet screen
     const isOnWallet = await walletCreationFlow.isOnWalletScreen();
     expect(isOnWallet).toBe(true);
 
     // Step 13: Verify the wallet name is displayed correctly
+    // Wait for wallet name to be available
     const walletName = await walletCreationFlow.getWalletName();
     expect(walletName).toContain('Template Wallet');
     console.log('Wallet name verified:', walletName);
