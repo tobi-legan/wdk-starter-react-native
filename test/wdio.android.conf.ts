@@ -26,4 +26,3 @@ export const config: Options.Testrunner = {
     },
   ],
 } as Options.Testrunner;
-

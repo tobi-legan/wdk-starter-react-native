@@ -5,7 +5,7 @@ export const config = {
   runner: 'local',
   port: 4723,
   
-  specs: ['./test/e2e/specs/**/*.ts'],
+  specs: ['./e2e/specs/**/*.ts'],
   exclude: [],
 
   maxInstances: 1,
@@ -15,7 +15,7 @@ export const config = {
       platformName: 'iOS',
       'appium:platformVersion': '26.1',
       'appium:deviceName': 'iPhone 17 Pro',
-      'appium:app': path.join(__dirname, 'test/apps/wdkstarterreactnative.app'),
+      'appium:app': path.join(__dirname, 'apps/wdkstarterreactnative.app'),
       'appium:automationName': 'XCUITest',
       'appium:bundleId': 'com.anonymous.wdkstarterreactnative',
       'appium:noReset': false,
@@ -50,4 +50,3 @@ export const config = {
     timeout: 180000, // 3 minutes - wallet creation can take 30-60 seconds, plus other test steps
   },
 };
-
